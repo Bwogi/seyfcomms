@@ -148,10 +148,14 @@ Example:
 
 ## Technical Stack
 
-- **Frontend**: Next.js, TypeScript, TailwindCSS
+- **Frontend**: 
+  - Next.js - React framework for production
+  - TypeScript - Type safety and developer experience
+  - Tailwind CSS - Utility-first CSS framework
+  - Headless UI - Unstyled, accessible UI components
 - **Backend**: Node.js, PostgreSQL
 - **Security**: 
-  - End-to-end encryption
+  - End-to-end encryption libraries (TBD)
   - Zero-knowledge protocols
   - Hardware security key support
 - **Infrastructure**: 
