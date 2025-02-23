@@ -4,6 +4,9 @@ import { verify } from 'jsonwebtoken'
 import clientPromise from '@/app/lib/mongodb'
 import { ObjectId } from 'mongodb'
 
+// Add dynamic config to prevent static rendering
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const token = cookies().get('auth-token')

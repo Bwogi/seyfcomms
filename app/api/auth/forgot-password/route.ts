@@ -2,12 +2,22 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import clientPromise from '@/app/lib/mongodb'
 import { sign } from 'jsonwebtoken'
-import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
+import { emailTemplates } from '@/app/lib/email-templates'
+import { logToDb, getRecentFailedAttempts } from '@/app/lib/logger'
 
 // Input validation schema
 const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),
 })
+
+// Add dynamic config to prevent static rendering
+export const dynamic = 'force-dynamic'
+
+// Rate limiting map
+const rateLimit = new Map<string, { count: number; timestamp: number }>()
+const RATE_LIMIT_DURATION = 3600000 // 1 hour in milliseconds
+const MAX_REQUESTS = 3 // Maximum 3 requests per hour
 
 export async function POST(req: Request) {
   try {
@@ -15,6 +25,78 @@ export async function POST(req: Request) {
     
     // Validate input
     const { email } = forgotPasswordSchema.parse(body)
+
+    // Check rate limit
+    const ip = req.headers.get('x-forwarded-for') || 'unknown'
+    const userAgent = req.headers.get('user-agent') || 'unknown'
+    const now = Date.now()
+    const userRateLimit = rateLimit.get(ip)
+
+    // Check recent failed attempts from database
+    const recentFailures = await getRecentFailedAttempts(email)
+    if (recentFailures >= 5) {
+      await logToDb({
+        type: 'auth',
+        action: 'password_reset_blocked',
+        email,
+        ip,
+        userAgent,
+        timestamp: new Date(),
+        metadata: { reason: 'too_many_failures' }
+      })
+
+      return NextResponse.json(
+        { message: 'Too many failed attempts. Please try again later.' },
+        { status: 429 }
+      )
+    }
+
+    if (userRateLimit) {
+      // Reset count if time window has passed
+      if (now - userRateLimit.timestamp > RATE_LIMIT_DURATION) {
+        rateLimit.set(ip, { count: 1, timestamp: now })
+      } else if (userRateLimit.count >= MAX_REQUESTS) {
+        await logToDb({
+          type: 'auth',
+          action: 'password_reset_blocked',
+          email,
+          ip,
+          userAgent,
+          timestamp: new Date(),
+          metadata: { reason: 'rate_limit_exceeded' }
+        })
+
+        return NextResponse.json(
+          { message: 'Too many requests. Please try again later.' },
+          { status: 429 }
+        )
+      } else {
+        rateLimit.set(ip, { 
+          count: userRateLimit.count + 1, 
+          timestamp: userRateLimit.timestamp 
+        })
+      }
+    } else {
+      rateLimit.set(ip, { count: 1, timestamp: now })
+    }
+    
+    // Check if Resend API key exists
+    if (!process.env.RESEND_API_KEY) {
+      console.error('RESEND_API_KEY is missing')
+      return NextResponse.json(
+        { message: 'Server configuration error. Please contact support.' },
+        { status: 500 }
+      )
+    }
+
+    // Check if JWT secret exists
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is missing')
+      return NextResponse.json(
+        { message: 'Server configuration error. Please contact support.' },
+        { status: 500 }
+      )
+    }
     
     // Connect to MongoDB
     const client = await clientPromise
@@ -26,6 +108,16 @@ export async function POST(req: Request) {
     
     // Don't reveal if user exists or not
     if (!user) {
+      await logToDb({
+        type: 'auth',
+        action: 'password_reset_failed',
+        email,
+        ip,
+        userAgent,
+        timestamp: new Date(),
+        metadata: { reason: 'user_not_found' }
+      })
+
       return NextResponse.json(
         { message: 'If an account exists with that email, we have sent password reset instructions.' },
         { status: 200 }
@@ -35,44 +127,58 @@ export async function POST(req: Request) {
     // Create reset token
     const resetToken = sign(
       { userId: user._id.toString(), type: 'password-reset' },
-      process.env.JWT_SECRET || '',
+      process.env.JWT_SECRET,
       { expiresIn: '1h' }
     )
 
     // Create reset URL
-    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password?token=${resetToken}`
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const resetUrl = `${appUrl}/auth/reset-password?token=${resetToken}`
 
-    // Create email transporter
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_SERVER_HOST,
-      port: parseInt(process.env.EMAIL_SERVER_PORT || '587'),
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_SERVER_USER,
-        pass: process.env.EMAIL_SERVER_PASSWORD,
-      },
-    })
+    try {
+      // Initialize Resend
+      const resend = new Resend(process.env.RESEND_API_KEY)
 
-    // Send email
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || 'noreply@seyfcomms.com',
-      to: email,
-      subject: 'Reset your SeyfComms password',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Reset Your Password</h2>
-          <p>You recently requested to reset your password for your SeyfComms account. Click the button below to reset it.</p>
-          <a href="${resetUrl}" style="display: inline-block; padding: 12px 24px; background-color: #4F46E5; color: white; text-decoration: none; border-radius: 4px; margin: 16px 0;">Reset Password</a>
-          <p>If you did not request a password reset, please ignore this email or contact support if you have concerns.</p>
-          <p>This password reset link is only valid for the next hour.</p>
-        </div>
-      `,
-    })
+      // Send email using template
+      await resend.emails.send({
+        from: 'SeyfComms <onboarding@resend.dev>',
+        to: email,
+        ...emailTemplates.resetPassword({ url: resetUrl })
+      })
 
-    return NextResponse.json(
-      { message: 'If an account exists with that email, we have sent password reset instructions.' },
-      { status: 200 }
-    )
+      await logToDb({
+        type: 'auth',
+        action: 'password_reset_email_sent',
+        email,
+        ip,
+        userAgent,
+        userId: user._id.toString(),
+        timestamp: new Date()
+      })
+
+      return NextResponse.json(
+        { message: 'If an account exists with that email, we have sent password reset instructions.' },
+        { status: 200 }
+      )
+    } catch (emailError) {
+      console.error('Email sending error:', emailError)
+      
+      await logToDb({
+        type: 'error',
+        action: 'email_send_failed',
+        email,
+        ip,
+        userAgent,
+        userId: user._id.toString(),
+        timestamp: new Date(),
+        error: emailError
+      })
+
+      return NextResponse.json(
+        { message: 'Failed to send reset email. Please try again later.' },
+        { status: 500 }
+      )
+    }
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

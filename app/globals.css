@@ -17,6 +17,17 @@
   --background-end-rgb: 255, 255, 255;
 }
 
+/* Toast container styles */
+.toast-container {
+  z-index: 9999;
+}
+
+/* Individual toast styles */
+.toast {
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --foreground-rgb: 255, 255, 255;
