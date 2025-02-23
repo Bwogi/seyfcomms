@@ -19,7 +19,9 @@ export default function Navigation() {
             <div className="flex justify-between h-16">
               <div className="flex">
                 <div className="flex-shrink-0 flex items-center">
-                  <span className="text-2xl font-bold text-indigo-600">SeyfComms</span>
+                  <Link href="/" className="text-2xl font-bold text-indigo-600">
+                    SeyfComms
+                  </Link>
                 </div>
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                   {navigation.map((item) => (
@@ -33,12 +35,18 @@ export default function Navigation() {
                   ))}
                 </div>
               </div>
-              <div className="flex items-center">
+              <div className="flex items-center space-x-4">
                 <Link
-                  href="/login"
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                  href="/auth/login"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50 border-indigo-600"
                 >
                   Sign in
+                </Link>
+                <Link
+                  href="/auth/register"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                >
+                  Register
                 </Link>
               </div>
             </div>
@@ -51,11 +59,29 @@ export default function Navigation() {
                   key={item.name}
                   as="a"
                   href={item.href}
-                  className="block pl-3 pr-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-gray-50"
+                  className="block pl-3 pr-4 py-2 border-l-4 text-base font-medium border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800"
                 >
                   {item.name}
                 </Disclosure.Button>
               ))}
+              <div className="pt-4 pb-3 border-t border-gray-200">
+                <div className="space-y-1">
+                  <Disclosure.Button
+                    as="a"
+                    href="/auth/login"
+                    className="block pl-3 pr-4 py-2 border-l-4 text-base font-medium border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800"
+                  >
+                    Sign in
+                  </Disclosure.Button>
+                  <Disclosure.Button
+                    as="a"
+                    href="/auth/register"
+                    className="block pl-3 pr-4 py-2 border-l-4 text-base font-medium border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800"
+                  >
+                    Register
+                  </Disclosure.Button>
+                </div>
+              </div>
             </div>
           </Disclosure.Panel>
         </>

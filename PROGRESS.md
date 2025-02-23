@@ -6,11 +6,11 @@
 - [x] TypeScript configuration
 - [x] TailwindCSS setup
 - [x] Basic landing page
-- [] Development environment setup
-- [] CI/CD pipeline
+- [x] Development environment setup
+- [x] CI/CD pipeline
 
 ### Authentication System ✅
-- [] User registration
+- [x] User registration
 - [] Login system
 - [] Password hashing
 - [] Session management
