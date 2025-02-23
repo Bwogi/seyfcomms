@@ -32,7 +32,7 @@ export async function middleware(request: NextRequest) {
     // Verify the token
     verify(token.value, process.env.JWT_SECRET || '')
     return NextResponse.next()
-  } catch (error) {
+  } catch {
     // Token is invalid - redirect to login
     const response = NextResponse.redirect(new URL('/auth/login', request.url))
     response.cookies.delete('auth-token')

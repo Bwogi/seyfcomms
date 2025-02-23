@@ -58,9 +58,12 @@ export async function POST(req: Request) {
     })
 
     // Return success but don't include the password
-    const { password: _, ...userWithoutPassword } = user
+    const { email: userEmail, _id, createdAt, updatedAt } = user
     return NextResponse.json(
-      { message: 'Login successful', user: userWithoutPassword },
+      { 
+        message: 'Login successful', 
+        user: { email: userEmail, _id, createdAt, updatedAt }
+      },
       { status: 200 }
     )
   } catch (error) {
