@@ -4,7 +4,7 @@ import clientPromise from '@/app/lib/mongodb'
 import { sign } from 'jsonwebtoken'
 import { Resend } from 'resend'
 import { emailTemplates } from '@/app/lib/email-templates'
-import { logToDb, getRecentFailedAttempts } from '@/app/lib/logger'
+import { logToDb, getRecentFailedAttempts, type LogError } from '@/app/lib/logger'
 
 // Input validation schema
 const forgotPasswordSchema = z.object({
@@ -160,9 +160,19 @@ export async function POST(req: Request) {
         { message: 'If an account exists with that email, we have sent password reset instructions.' },
         { status: 200 }
       )
-    } catch (emailError) {
+    } catch (emailError: unknown) {
       console.error('Email sending error:', emailError)
       
+      const logError: LogError = {
+        name: emailError instanceof Error ? emailError.name : 'Unknown Error',
+        message: emailError instanceof Error ? emailError.message : 'An unknown error occurred',
+        stack: emailError instanceof Error ? emailError.stack : undefined,
+        details: {
+          email,
+          resetUrl
+        }
+      }
+
       await logToDb({
         type: 'error',
         action: 'email_send_failed',
@@ -171,7 +181,7 @@ export async function POST(req: Request) {
         userAgent,
         userId: user._id.toString(),
         timestamp: new Date(),
-        error: emailError
+        error: logError
       })
 
       return NextResponse.json(
