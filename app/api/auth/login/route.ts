@@ -4,6 +4,7 @@ import { z } from 'zod'
 import clientPromise from '@/app/lib/mongodb'
 import { cookies } from 'next/headers'
 import { sign } from 'jsonwebtoken'
+import { MongoClient } from 'mongodb'
 
 // Input validation schema
 const loginSchema = z.object({
@@ -19,7 +20,21 @@ export async function POST(req: Request) {
     const { email, password } = loginSchema.parse(body)
     
     // Connect to MongoDB
-    const client = await clientPromise
+    let client: MongoClient;
+    try {
+      client = await Promise.race([
+        clientPromise,
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Database connection timeout')), 5000)
+        )
+      ]);
+    } catch (dbError) {
+      console.error('MongoDB connection error:', dbError);
+      return NextResponse.json(
+        { message: 'Database connection error. Please try again later.' },
+        { status: 503 }
+      );
+    }
     const db = client.db('seyfcomms')
     const users = db.collection('users')
     
