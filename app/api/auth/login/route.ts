@@ -25,11 +25,20 @@ export async function POST(req: Request) {
       client = await Promise.race([
         clientPromise,
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Database connection timeout')), 5000)
+          setTimeout(() => reject(new Error('Database connection timeout')), 9000)  // 9 seconds
         )
       ]);
     } catch (dbError) {
       console.error('MongoDB connection error:', dbError);
+      // Log more details about the error
+      const errorDetails = {
+        message: dbError instanceof Error ? dbError.message : 'Unknown error',
+        stack: dbError instanceof Error ? dbError.stack : undefined,
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV
+      };
+      console.error('Detailed connection error:', errorDetails);
+      
       return NextResponse.json(
         { message: 'Database connection error. Please try again later.' },
         { status: 503 }
