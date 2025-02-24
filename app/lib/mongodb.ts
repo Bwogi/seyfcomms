@@ -1,4 +1,4 @@
-import { MongoClient } from 'mongodb'
+import { MongoClient, MongoClientOptions } from 'mongodb'
 
 if (!process.env.MONGODB_URI) {
   throw new Error('Invalid/Missing environment variable: "MONGODB_URI"')
@@ -7,15 +7,16 @@ if (!process.env.MONGODB_URI) {
 const uri = process.env.MONGODB_URI
 console.log('Attempting to connect to MongoDB with URI:', uri.replace(/:[^:/@]+@/, ':****@'));
 
-const options = {
+const options: MongoClientOptions = {
   maxPoolSize: 1,
   minPoolSize: 1,
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 30000,
   connectTimeoutMS: 10000,
-  keepAlive: true,
   retryWrites: true,
-  w: 'majority'
+  writeConcern: {
+    w: 'majority'
+  }
 }
 
 let client: MongoClient | undefined = undefined;
