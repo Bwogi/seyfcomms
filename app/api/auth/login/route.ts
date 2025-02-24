@@ -22,6 +22,14 @@ export async function POST(req: Request) {
     // Validate input
     const { email, password } = loginSchema.parse(body)
     
+    // Add request validation
+    if (!email || !password) {
+      return NextResponse.json(
+        { message: 'Email and password are required' },
+        { status: 400 }
+      );
+    }
+
     // Connect to MongoDB with retries
     let client: MongoClient | null = null;
     let retries = 3;
