@@ -6,14 +6,13 @@ if (!process.env.MONGODB_URI) {
 
 const uri = process.env.MONGODB_URI
 const options = {
-  connectTimeoutMS: 10000,  // 10 seconds
-  socketTimeoutMS: 10000,   // 10 seconds
-  serverSelectionTimeoutMS: 10000,  // 10 seconds
-  maxPoolSize: 10,
-  minPoolSize: 1,
+  maxPoolSize: 1, // Maintain up to 1 socket connection
+  serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
 }
 
-let client
+// In production, it's better to declare the client outside of any function scope
+let client: MongoClient | undefined
 let clientPromise: Promise<MongoClient>
 
 if (process.env.NODE_ENV === 'development') {
@@ -29,9 +28,13 @@ if (process.env.NODE_ENV === 'development') {
   }
   clientPromise = globalWithMongo._mongoClientPromise
 } else {
-  // In production mode, it's best to not use a global variable.
-  client = new MongoClient(uri, options)
-  clientPromise = client.connect()
+  // In production mode, create a new client for each connection
+  if (!client) {
+    client = new MongoClient(uri, options)
+    clientPromise = client.connect()
+  } else {
+    clientPromise = Promise.resolve(client)
+  }
 }
 
 // Export a module-scoped MongoClient promise. By doing this in a

@@ -6,6 +6,9 @@ import { cookies } from 'next/headers'
 import { sign } from 'jsonwebtoken'
 import { MongoClient } from 'mongodb'
 
+// Add dynamic config to prevent static rendering
+export const dynamic = 'force-dynamic'
+
 // Input validation schema
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -19,31 +22,41 @@ export async function POST(req: Request) {
     // Validate input
     const { email, password } = loginSchema.parse(body)
     
-    // Connect to MongoDB
-    let client: MongoClient;
-    try {
-      client = await Promise.race([
-        clientPromise,
-        new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Database connection timeout')), 9000)  // 9 seconds
-        )
-      ]);
-    } catch (dbError) {
-      console.error('MongoDB connection error:', dbError);
-      // Log more details about the error
-      const errorDetails = {
-        message: dbError instanceof Error ? dbError.message : 'Unknown error',
-        stack: dbError instanceof Error ? dbError.stack : undefined,
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV
-      };
-      console.error('Detailed connection error:', errorDetails);
-      
+    // Connect to MongoDB with retries
+    let client: MongoClient | null = null;
+    let retries = 3;
+    
+    while (retries > 0) {
+      try {
+        client = await Promise.race([
+          clientPromise,
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Database connection timeout')), 4000)
+          )
+        ]);
+        break; // If connection successful, break the retry loop
+      } catch (error) {
+        retries--;
+        if (retries === 0) {
+          console.error('All MongoDB connection attempts failed:', error);
+          return NextResponse.json(
+            { message: 'Unable to connect to database. Please try again later.' },
+            { status: 503 }
+          );
+        }
+        // Wait 1 second before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    // Check if client is connected
+    if (!client) {
       return NextResponse.json(
-        { message: 'Database connection error. Please try again later.' },
+        { message: 'Unable to connect to database. Please try again later.' },
         { status: 503 }
       );
     }
+
     const db = client.db('seyfcomms')
     const users = db.collection('users')
     
