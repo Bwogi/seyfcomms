@@ -99,7 +99,16 @@ export async function POST(req: Request) {
     }
     
     // Connect to MongoDB
-    const client = await clientPromise
+    let client;
+    try {
+      client = await clientPromise;
+    } catch (dbError) {
+      console.error('MongoDB connection error:', dbError);
+      return NextResponse.json(
+        { message: 'Database connection error. Please try again later.' },
+        { status: 500 }
+      );
+    }
     const db = client.db('seyfcomms')
     const users = db.collection('users')
     
