@@ -5,38 +5,75 @@ if (!process.env.MONGODB_URI) {
 }
 
 const uri = process.env.MONGODB_URI
+console.log('Attempting to connect to MongoDB with URI:', uri.replace(/:[^:/@]+@/, ':****@'));
+
 const options = {
-  maxPoolSize: 1, // Maintain up to 1 socket connection
-  serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
-  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  maxPoolSize: 1,
+  minPoolSize: 1,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 30000,
+  connectTimeoutMS: 10000,
+  keepAlive: true,
+  retryWrites: true,
+  w: 'majority'
 }
 
-// In production, it's better to declare the client outside of any function scope
-let client: MongoClient | undefined
-let clientPromise: Promise<MongoClient>
+let client: MongoClient | undefined = undefined;
+let clientPromise: Promise<MongoClient>;
+
+const connectToDatabase = async () => {
+  try {
+    if (!client) {
+      console.log('Creating new MongoDB client...');
+      client = new MongoClient(uri, options);
+      
+      // Add connection event listeners before connecting
+      client.on('connectionPoolCreated', () => console.log('Connection pool created'));
+      client.on('connectionPoolClosed', () => console.log('Connection pool closed'));
+      client.on('connectionCreated', () => console.log('New connection created'));
+      client.on('connectionClosed', () => console.log('Connection closed'));
+      client.on('error', (error) => console.error('MongoDB client error:', error));
+      
+      console.log('Attempting to connect...');
+      await client.connect();
+      
+      // Test the connection
+      await client.db('admin').command({ ping: 1 });
+      console.log('Successfully connected to MongoDB and verified connection');
+    }
+    return client;
+  } catch (error) {
+    console.error('Error connecting to MongoDB:', error);
+    // Reset client on error
+    client = undefined;
+    throw error;
+  }
+};
+
+// Handle cleanup
+process.on('SIGINT', async () => {
+  if (client) {
+    console.log('Closing MongoDB connection due to app termination');
+    await client.close();
+    process.exit(0);
+  }
+});
 
 if (process.env.NODE_ENV === 'development') {
-  // In development mode, use a global variable so that the value
-  // is preserved across module reloads caused by HMR (Hot Module Replacement).
   let globalWithMongo = global as typeof globalThis & {
     _mongoClientPromise?: Promise<MongoClient>
   }
 
   if (!globalWithMongo._mongoClientPromise) {
-    client = new MongoClient(uri, options)
-    globalWithMongo._mongoClientPromise = client.connect()
-  }
-  clientPromise = globalWithMongo._mongoClientPromise
-} else {
-  // In production mode, create a new client for each connection
-  if (!client) {
-    client = new MongoClient(uri, options)
-    clientPromise = client.connect()
+    console.log('Development: Creating new global MongoDB connection');
+    globalWithMongo._mongoClientPromise = connectToDatabase();
   } else {
-    clientPromise = Promise.resolve(client)
+    console.log('Development: Reusing existing global MongoDB connection');
   }
+  clientPromise = globalWithMongo._mongoClientPromise;
+} else {
+  console.log('Production: Creating new MongoDB connection');
+  clientPromise = connectToDatabase();
 }
 
-// Export a module-scoped MongoClient promise. By doing this in a
-// separate module, the client can be shared across functions.
-export default clientPromise
+export default clientPromise;

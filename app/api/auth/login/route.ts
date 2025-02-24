@@ -4,7 +4,7 @@ import { z } from 'zod'
 import clientPromise from '@/app/lib/mongodb'
 import { cookies } from 'next/headers'
 import { sign } from 'jsonwebtoken'
-import { MongoClient } from 'mongodb'
+import { MongoClient, MongoServerError } from 'mongodb'
 
 // Add dynamic config to prevent static rendering
 export const dynamic = 'force-dynamic'
@@ -33,20 +33,25 @@ export async function POST(req: Request) {
     // Connect to MongoDB with retries
     let client: MongoClient | null = null;
     let retries = 3;
+    let lastError: Error | null = null;
     
     while (retries > 0) {
       try {
+        console.log(`Attempting to connect to MongoDB (${retries} retries left)...`);
         client = await Promise.race([
           clientPromise,
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Database connection timeout')), 4000)
+            setTimeout(() => reject(new Error('Database connection timeout')), 5000)
           )
         ]);
-        break; // If connection successful, break the retry loop
+        console.log('Successfully connected to MongoDB');
+        break;
       } catch (error) {
+        lastError = error as Error;
+        console.error(`Connection attempt failed (${retries} retries left):`, error);
         retries--;
         if (retries === 0) {
-          console.error('All MongoDB connection attempts failed:', error);
+          console.error('All MongoDB connection attempts failed. Last error:', error);
           return NextResponse.json(
             { message: 'Unable to connect to database. Please try again later.' },
             { status: 503 }
@@ -59,12 +64,14 @@ export async function POST(req: Request) {
 
     // Check if client is connected
     if (!client) {
+      console.error('No MongoDB client available after connection attempts');
       return NextResponse.json(
-        { message: 'Unable to connect to database. Please try again later.' },
+        { message: 'Database connection error. Please try again later.' },
         { status: 503 }
       );
     }
 
+    console.log('Attempting to access database and collection...');
     const db = client.db('seyfcomms')
     const users = db.collection('users')
     
